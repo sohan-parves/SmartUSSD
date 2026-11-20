@@ -725,6 +725,26 @@ public class USSDAccessibilityService extends AccessibilityService {
         }
     }
 
+    /** Opens the main dialer page, ready for a fresh code. */
+    private void openDialerWithNewCode() {
+
+        try {
+
+            Intent i = getPackageManager()
+                    .getLaunchIntentForPackage(getPackageName());
+
+            if (i != null) {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                i.putExtra("dial_new", true);
+                startActivity(i);
+            }
+
+        } catch (Exception ignored) {
+        }
+    }
+
     /* ---------------- Overlay UI ---------------- */
 
     private void showOverlay(
@@ -786,6 +806,13 @@ public class USSDAccessibilityService extends AccessibilityService {
 
             actionBox.addView(close, actionParams());
 
+            Button dialNew = makeActionButton("Dial a new code", false);
+            dialNew.setOnClickListener(v -> {
+                endSession(false);
+                openDialerWithNewCode();
+            });
+            actionBox.addView(dialNew, actionParams());
+
         } else {
 
             Button cancel = makeActionButton("Cancel session", false);
@@ -793,6 +820,13 @@ public class USSDAccessibilityService extends AccessibilityService {
             cancel.setOnClickListener(v -> endSession(true));
 
             actionBox.addView(cancel, actionParams());
+
+            Button dialNew = makeActionButton("Dial a new code", false);
+            dialNew.setOnClickListener(v -> {
+                endSession(true);
+                openDialerWithNewCode();
+            });
+            actionBox.addView(dialNew, actionParams());
         }
 
         // New page: slide/fade the content in, then drop the loader.

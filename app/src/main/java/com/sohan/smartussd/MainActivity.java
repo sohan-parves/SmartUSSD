@@ -124,6 +124,15 @@ public class MainActivity extends Activity {
 
         panel = new ResponsePanel(findViewById(R.id.rootFrame));
 
+        // "Dial a new code" from the result page
+        panel.setCloseAction("Dial a new code", () -> {
+            resetSession();
+            panel.resetAll();
+            ussdInput.setText("");
+            ussdInput.setHint(HINT_CODE);
+            ussdInput.requestFocus();
+        });
+
         ussdManager = new USSDManager(this);
 
         subscriptionManager = getSystemService(SubscriptionManager.class);
@@ -1074,6 +1083,22 @@ public class MainActivity extends Activity {
                 panel::hideError);
 
         Feedback.reject(ussdInput);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+
+        if (intent != null && intent.getBooleanExtra("dial_new", false)) {
+            // Came from the overlay's "Dial a new code" button.
+            intent.removeExtra("dial_new");
+            resetSession();
+            panel.resetAll();
+            ussdInput.setText("");
+            ussdInput.setHint(HINT_CODE);
+            ussdInput.requestFocus();
+        }
     }
 
     @Override
