@@ -41,7 +41,11 @@ The normal phone dialer shows USSD replies in a small system pop-up. You have to
 | ♻️ | **Timeout reset:** everything is cleared and you land on the home page |
 | ⚠️ | Friendly error screens for refused codes, missing permissions and service problems |
 | 🌙 | Dark theme with a splash screen |
-| 🔒 | Portrait layout, no ads, no data stored |
+| ⚙️ | **Settings & Permissions Sheet** to manage permissions, autostart, and notifications |
+| 🔔 | **Notification Toggle** to turn keep-alive foreground notification ON or OFF anytime |
+| 📞 | **Dial a new code** option available on all response and menu screens |
+| 🛡️ | **Keep-alive Service** preventing aggressive OEM memory killers (MIUI/HyperOS) |
+| 🔄 | **Step-by-step Onboarding** configuring all permissions sequentially on first run |
 
 ---
 
@@ -90,7 +94,9 @@ Smart USSD has two ways of talking to the network.
 | `READ_PHONE_STATE` | To list your SIM cards and pick the right one |
 | `ACCESS_NETWORK_STATE` | To check the network state |
 | `INTERNET` | Reserved for future features, not used for USSD |
-| Accessibility Service (optional) | Reads the USSD reply from the system phone dialog so it can be shown inside the app |
+| `POST_NOTIFICATIONS` | For background keep-alive service notification (toggleable ON/OFF) |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Prevents OEM battery savers from killing the helper service |
+| Accessibility Service | Reads the USSD reply from the system phone dialog so it can be shown inside the app |
 
 **Privacy:** the Accessibility Service only reads the USSD reply from the system phone dialog so it can be displayed in the app. No other data is read or stored.
 
@@ -164,6 +170,7 @@ src/main
 │       ├── USSDManager.java         # Dialing, errors and timeouts
 │       ├── USSDResponseParser.java  # Turns reply text into menu items
 │       ├── USSDSession.java
+│       ├── HelperKeepAliveService.java # Foreground service keeping helper alive
 │       └── USSDAccessibilityService.java
 └── res/                             # Layouts, drawables, colours, themes
 ```
@@ -197,7 +204,7 @@ Choose a license for your project, for example [MIT](https://choosealicense.com/
 
 <div align="center">
 
-Made with ❤️ by **YOUR_NAME**
+Made with ❤️ by **Sohan Parves**
 
 If this project helps you, give it a ⭐ on GitHub.
 
