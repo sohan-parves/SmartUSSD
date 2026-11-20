@@ -46,13 +46,12 @@ public class ResponsePanel {
         final View bar = root.findViewById(R.id.bottomBar);
 
         // Keep the last lines of content clear of the bottom bar.
-        bar.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
-                content.setPadding(
-                        content.getPaddingLeft(),
-                        content.getPaddingTop(),
-                        content.getPaddingRight(),
-                        (b - t) + (int) (16 * root.getResources()
-                                .getDisplayMetrics().density)));
+        bar.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> content.setPadding(
+                content.getPaddingLeft(),
+                content.getPaddingTop(),
+                content.getPaddingRight(),
+                (b - t) + (int) (16 * root.getResources()
+                        .getDisplayMetrics().density)));
         body = root.findViewById(R.id.bodyContainer);
         menu = root.findViewById(R.id.menuContainer);
         closeButton = root.findViewById(R.id.btnNewCode);
@@ -109,8 +108,7 @@ public class ResponsePanel {
             String primaryLabel,
             Runnable onPrimary,
             String secondaryLabel,
-            Runnable onSecondary
-    ) {
+            Runnable onSecondary) {
         loading.hideNow();
 
         errorView.show(
@@ -129,8 +127,7 @@ public class ResponsePanel {
     public void showHelperGuide(
             Runnable openSettings,
             String secondaryLabel,
-            Runnable onSecondary
-    ) {
+            Runnable onSecondary) {
 
         loading.hideNow();
 
@@ -140,7 +137,7 @@ public class ResponsePanel {
                 "One quick permission lets Smart USSD read your phone's USSD "
                         + "reply and show it here.",
                 null,
-                new String[]{
+                new String[] {
                         "Tap the button below to open Accessibility settings.",
                         "Open \"Installed apps\" (or \"Downloaded apps\") and "
                                 + "choose Smart USSD.",
@@ -156,12 +153,14 @@ public class ResponsePanel {
                 onSecondary);
     }
 
-    /** Guide when the service stopped ("Not working. Tap for info.") and needs a quick toggle. */
+    /**
+     * Guide when the service stopped ("Not working. Tap for info.") and needs a
+     * quick toggle.
+     */
     public void showHelperRestartGuide(
             Runnable openSettings,
             String secondaryLabel,
-            Runnable onSecondary
-    ) {
+            Runnable onSecondary) {
         loading.hideNow();
 
         errorView.show(
@@ -169,7 +168,7 @@ public class ResponsePanel {
                 "Restart USSD helper",
                 "The helper service stopped when the app was closed (\"Not working. Tap for info.\"). A quick OFF/ON toggle will reactivate it.",
                 null,
-                new String[]{
+                new String[] {
                         "Tap the button below to open Accessibility settings.",
                         "Tap Smart USSD (which says \"Not working. Tap for info.\").",
                         "Turn the switch OFF, then turn it back ON.",
@@ -202,8 +201,7 @@ public class ResponsePanel {
 
     public void showResponse(
             String response,
-            USSDMenuAdapter.OnMenuClickListener listener
-    ) {
+            USSDMenuAdapter.OnMenuClickListener listener) {
 
         List<USSDMenuItem> items = parser.parse(response);
 
@@ -254,8 +252,7 @@ public class ResponsePanel {
 
         BodyRenderer.render(root.getContext(), this.body, body);
 
-        LinearLayout.LayoutParams params =
-                (LinearLayout.LayoutParams) menu.getLayoutParams();
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) menu.getLayoutParams();
 
         params.topMargin = (hasMenu && !body.isEmpty())
                 ? (int) (18 * root.getResources().getDisplayMetrics().density)

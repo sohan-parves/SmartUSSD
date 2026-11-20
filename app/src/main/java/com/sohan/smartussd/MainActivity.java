@@ -30,6 +30,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.sohan.smartussd.ui.DialPadView;
 import com.sohan.smartussd.ui.Feedback;
 import com.sohan.smartussd.ui.ResponsePanel;
@@ -142,6 +143,11 @@ public class MainActivity extends Activity {
         updateStatusPill();
 
         setupVersionFooter();
+
+        ImageButton btnSettings = findViewById(R.id.btnSettings);
+        if (btnSettings != null) {
+            btnSettings.setOnClickListener(v -> showSettingsDialog());
+        }
 
         btnSend.setOnClickListener(v -> onSendClicked());
     }
@@ -414,7 +420,8 @@ public class MainActivity extends Activity {
 
         if (requestCode == REQUEST_PERMISSIONS) {
 
-            boolean phoneGranted = checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+            boolean phoneGranted = checkSelfPermission(
+                    Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
                     && checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED;
 
             if (phoneGranted) {
@@ -1244,17 +1251,20 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean isXiaomiDevice() {
+        String manufacturer = Build.MANUFACTURER.toLowerCase();
+        return manufacturer.contains("xiaomi")
+                || manufacturer.contains("redmi")
+                || manufacturer.contains("poco");
+    }
+
     private boolean needsXiaomiAutostart() {
 
         if (!USSDAccessibilityService.isEnabled(this)) {
             return false;
         }
 
-        String manufacturer = Build.MANUFACTURER.toLowerCase();
-
-        if (!manufacturer.contains("xiaomi")
-                && !manufacturer.contains("redmi")
-                && !manufacturer.contains("poco")) {
+        if (!isXiaomiDevice()) {
             return false;
         }
 
@@ -1324,6 +1334,184 @@ public class MainActivity extends Activity {
             intent.setData(Uri.parse("package:" + getPackageName()));
             startActivity(intent);
         } catch (Exception ignored) {
+        }
+    }
+
+    /* ---- Settings & Permissions Bottom Sheet ---- */
+
+    private void showSettingsDialog() {
+        BottomSheetDialog sheet = new BottomSheetDialog(this);
+        View view = getLayoutInflater().inflate(R.layout.dialog_settings, null);
+        sheet.setContentView(view);
+
+        // Make sheet background transparent so rounded top corners render smoothly
+        View bottomSheet = sheet.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (bottomSheet != null) {
+            bottomSheet.setBackgroundResource(android.R.color.transparent);
+        }
+
+        ImageButton btnClose = view.findViewById(R.id.btnCloseSettings);
+        if (btnClose != null) {
+            btnClose.setOnClickListener(v -> sheet.dismiss());
+        }
+
+        // 1. Phone permission
+        View itemPhone = view.findViewById(R.id.settingItemPhone);
+        TextView badgePhone = view.findViewById(R.id.badgePhone);
+        if (hasRuntimePermissions()) {
+            badgePhone.setText("GRANTED");
+            badgePhone.setTextColor(getColor(R.color.success));
+            badgePhone.setBackground(pillDrawable(getColor(R.color.success_soft)));
+        } else {
+            badgePhone.setText("TAP TO ALLOW");
+            badgePhone.setTextColor(getColor(R.color.error));
+            badgePhone.setBackground(pillDrawable(getColor(R.color.error_soft)));
+        }
+        itemPhone.setOnClickListener(v -> {
+            sheet.dismiss();
+            requestOrExplainPermissions();
+        });
+
+        // 2. USSD Helper
+        View itemHelper = view.findViewById(R.id.settingItemHelper);
+        TextView badgeHelper = view.findViewById(R.id.badgeHelper);
+        if (USSDAccessibilityService.isEnabled(this)) {
+            badgeHelper.setText("ACTIVE");
+            badgeHelper.setTextColor(getColor(R.color.success));
+            badgeHelper.setBackground(pillDrawable(getColor(R.color.success_soft)));
+        } else if (USSDAccessibilityService.isCrashedOrNotWorking(this)) {
+            badgeHelper.setText("RESTART NEEDED");
+            badgeHelper.setTextColor(getColor(R.color.error));
+            badgeHelper.setBackground(pillDrawable(getColor(R.color.error_soft)));
+        } else {
+            badgeHelper.setText("TURN ON");
+            badgeHelper.setTextColor(getColor(R.color.warning));
+            badgeHelper.setBackground(pillDrawable(getColor(R.color.warning_soft)));
+        }
+        itemHelper.setOnClickListener(v -> {
+            sheet.dismiss();
+            showHelperGuideManual();
+        });
+
+        // 3. Battery Saver
+        View itemBattery = view.findViewById(R.id.settingItemBattery);
+        TextView badgeBattery = view.findViewById(R.id.badgeBattery);
+        PowerManager pm = getSystemService(PowerManager.class);
+        boolean batteryIgnored = pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        if (batteryIgnored) {
+            badgeBattery.setText("ALLOWED");
+            badgeBattery.setTextColor(getColor(R.color.success));
+            badgeBattery.setBackground(pillDrawable(getColor(R.color.success_soft)));
+        } else {
+            badgeBattery.setText("RESTRICTED");
+            badgeBattery.setTextColor(getColor(R.color.warning));
+            badgeBattery.setBackground(pillDrawable(getColor(R.color.warning_soft)));
+        }
+        itemBattery.setOnClickListener(v -> {
+            sheet.dismiss();
+            requestBatteryOptimisationDirect();
+        });
+
+        // 4. Xiaomi Autostart
+        View itemAutostart = view.findViewById(R.id.settingItemAutostart);
+        TextView badgeAutostart = view.findViewById(R.id.badgeAutostart);
+        if (!isXiaomiDevice()) {
+            itemAutostart.setVisibility(View.GONE);
+        } else {
+            itemAutostart.setVisibility(View.VISIBLE);
+            badgeAutostart.setText("OPEN SETTINGS");
+            badgeAutostart.setTextColor(getColor(R.color.accent));
+            badgeAutostart.setBackground(pillDrawable(getColor(R.color.accent_soft)));
+            itemAutostart.setOnClickListener(v -> {
+                sheet.dismiss();
+                openXiaomiAutostart();
+            });
+        }
+
+        // 5. Notification
+        View itemNotification = view.findViewById(R.id.settingItemNotification);
+        TextView badgeNotification = view.findViewById(R.id.badgeNotification);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            boolean notifGranted = checkSelfPermission(
+                    Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+            if (notifGranted) {
+                badgeNotification.setText("ALLOWED");
+                badgeNotification.setTextColor(getColor(R.color.success));
+                badgeNotification.setBackground(pillDrawable(getColor(R.color.success_soft)));
+            } else {
+                badgeNotification.setText("OFF");
+                badgeNotification.setTextColor(getColor(R.color.text_muted));
+                badgeNotification.setBackground(pillDrawable(getColor(R.color.surface_alt)));
+            }
+            itemNotification.setOnClickListener(v -> {
+                sheet.dismiss();
+                requestNotificationPermission();
+            });
+        } else {
+            itemNotification.setVisibility(View.GONE);
+        }
+
+        // Actions:
+        Button btnViewGuide = view.findViewById(R.id.btnViewGuide);
+        if (btnViewGuide != null) {
+            btnViewGuide.setOnClickListener(v -> {
+                sheet.dismiss();
+                showHelperGuideManual();
+            });
+        }
+
+        Button btnReRunSetup = view.findViewById(R.id.btnReRunSetup);
+        if (btnReRunSetup != null) {
+            btnReRunSetup.setOnClickListener(v -> {
+                sheet.dismiss();
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .remove(KEY_PHONE_PERM_REQUESTED)
+                        .remove(KEY_BATTERY_OPT_ASKED)
+                        .remove(KEY_AUTOSTART_ASKED)
+                        .remove("setup_complete_toast_shown")
+                        .apply();
+                helperPromptedThisRun = false;
+                proceedWithNextPermissionStep();
+            });
+        }
+
+        Button btnAppDetails = view.findViewById(R.id.btnAppDetails);
+        if (btnAppDetails != null) {
+            btnAppDetails.setOnClickListener(v -> {
+                sheet.dismiss();
+                openAppSettings();
+            });
+        }
+
+        TextView footerVersion = view.findViewById(R.id.settingsFooterVersion);
+        if (footerVersion != null) {
+            footerVersion.setText("Smart USSD • Version " + getAppVersionName());
+        }
+
+        sheet.show();
+    }
+
+    private void requestBatteryOptimisationDirect() {
+        try {
+            Intent intent = new Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                startActivity(intent);
+            } catch (Exception ex) {
+                openAppSettings();
+            }
+        }
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 101);
+        } else {
+            openAppSettings();
         }
     }
 }
