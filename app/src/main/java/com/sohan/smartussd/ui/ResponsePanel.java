@@ -145,7 +145,7 @@ public class ResponsePanel {
                         "Open \"Installed apps\" (or \"Downloaded apps\") and "
                                 + "choose Smart USSD.",
                         "Turn the switch ON and tap Allow.",
-                        "Come back here and dial your code again.",
+                        "Come back here to continue setup.",
                         "Tip: if the switch is greyed out, open Settings › Apps › "
                                 + "Smart USSD, tap ⋮ and choose \"Allow restricted "
                                 + "settings\"."

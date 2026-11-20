@@ -143,9 +143,6 @@ public class MainActivity extends Activity {
 
         setupVersionFooter();
 
-        // Ask for everything the app needs, right at the first start.
-        checkPermissions();
-
         btnSend.setOnClickListener(v -> onSendClicked());
     }
 
@@ -179,6 +176,7 @@ public class MainActivity extends Activity {
 
         if (!coldStart) {
             splash.setVisibility(View.GONE);
+            proceedWithNextPermissionStep();
             return;
         }
 
@@ -203,7 +201,10 @@ public class MainActivity extends Activity {
         handler.postDelayed(() -> splash.animate()
                 .alpha(0f)
                 .setDuration(260)
-                .withEndAction(() -> splash.setVisibility(View.GONE))
+                .withEndAction(() -> {
+                    splash.setVisibility(View.GONE);
+                    proceedWithNextPermissionStep();
+                })
                 .start(),
                 850);
     }
@@ -371,18 +372,17 @@ public class MainActivity extends Activity {
 
     private void checkPermissions() {
 
-        String[] permissions = {
-                Manifest.permission.CALL_PHONE,
-                Manifest.permission.READ_PHONE_STATE
-        };
-
         List<String> missing = new ArrayList<>();
 
-        for (String permission : permissions) {
-
-            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-
-                missing.add(permission);
+        if (checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.CALL_PHONE);
+        }
+        if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.READ_PHONE_STATE);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.POST_NOTIFICATIONS);
             }
         }
 
@@ -399,7 +399,7 @@ public class MainActivity extends Activity {
 
             loadSIMs();
             updateStatusPill();
-            askForHelperOnce();
+            proceedWithNextPermissionStep();
         }
     }
 
@@ -414,17 +414,10 @@ public class MainActivity extends Activity {
 
         if (requestCode == REQUEST_PERMISSIONS) {
 
-            boolean granted = grantResults.length > 0;
+            boolean phoneGranted = checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED;
 
-            for (int result : grantResults) {
-
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    granted = false;
-                    break;
-                }
-            }
-
-            if (granted) {
+            if (phoneGranted) {
 
                 if (permissionErrorShown) {
                     permissionErrorShown = false;
@@ -442,7 +435,7 @@ public class MainActivity extends Activity {
                     startNewCode(code);
 
                 } else {
-                    askForHelperOnce();
+                    proceedWithNextPermissionStep();
                 }
 
             } else {
@@ -453,6 +446,58 @@ public class MainActivity extends Activity {
                 // Keep the typed code: it is sent as soon as the
                 // permission is allowed (also after the settings page).
                 showPermissionNeeded();
+            }
+        }
+    }
+
+    /**
+     * Chained sequential permission setup: asks for each permission
+     * one by one in priority order until everything is configured:
+     * 1. Phone & Notification permissions (runtime prompt)
+     * 2. Accessibility Service / USSD Helper (system settings)
+     * 3. Battery Optimisation Exemption (system prompt)
+     * 4. Autostart & Background settings (for Xiaomi/Redmi/POCO)
+     */
+    private void proceedWithNextPermissionStep() {
+        if (isFinishing()) {
+            return;
+        }
+
+        // 1. Phone permissions first
+        if (!hasRuntimePermissions()) {
+            requestOrExplainPermissions();
+            return;
+        }
+
+        // 2. Accessibility USSD Helper next
+        if (!USSDAccessibilityService.isEnabled(this)) {
+            askForHelperOnce();
+            return;
+        }
+
+        // 3. Battery optimisation exemption next
+        if (needsBatteryOptimisation()) {
+            requestBatteryOptimisation();
+            return;
+        }
+
+        // 4. Xiaomi / MIUI autostart next
+        if (needsXiaomiAutostart()) {
+            promptXiaomiAutostart();
+            return;
+        }
+
+        // All done!
+        updateStatusPill();
+        checkSetupComplete();
+    }
+
+    private void checkSetupComplete() {
+        if (hasRuntimePermissions() && USSDAccessibilityService.isEnabled(this)) {
+            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            if (!prefs.getBoolean("setup_complete_toast_shown", false)) {
+                prefs.edit().putBoolean("setup_complete_toast_shown", true).apply();
+                Toast.makeText(this, "Smart USSD is ready to dial!", Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -1067,18 +1112,12 @@ public class MainActivity extends Activity {
                 String code = pendingCode;
                 pendingCode = null;
                 startNewCode(code);
-            } else if (!USSDAccessibilityService.isEnabled(this)
-                    && !helperPromptedThisRun) {
-                askForHelperOnce();
+            } else {
+                View splash = findViewById(R.id.splashLayer);
+                if (splash == null || splash.getVisibility() != View.VISIBLE) {
+                    proceedWithNextPermissionStep();
+                }
             }
-
-            // One-time: request battery optimisation exemption so the
-            // foreground service (and therefore the accessibility service)
-            // is never killed.
-            requestBatteryOptimisation();
-
-            // One-time: Xiaomi autostart guide
-            promptXiaomiAutostart();
         } else {
             updateStatusPill();
             updateSimCardView();
@@ -1162,6 +1201,28 @@ public class MainActivity extends Activity {
 
     /* ---- Battery optimisation & Xiaomi autostart (one-time) ---- */
 
+    private boolean needsBatteryOptimisation() {
+
+        if (!USSDAccessibilityService.isEnabled(this)) {
+            return false; // helper not on yet; ask later
+        }
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        if (prefs.getBoolean(KEY_BATTERY_OPT_ASKED, false)) {
+            return false;
+        }
+
+        PowerManager pm = getSystemService(PowerManager.class);
+
+        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            prefs.edit().putBoolean(KEY_BATTERY_OPT_ASKED, true).apply();
+            return false;
+        }
+
+        return true;
+    }
+
     /**
      * Ask the system to exempt the app from battery optimisation.
      * This prevents Xiaomi/MIUI from killing the foreground service
@@ -1170,23 +1231,7 @@ public class MainActivity extends Activity {
      */
     private void requestBatteryOptimisation() {
 
-        if (!USSDAccessibilityService.isEnabled(this)) {
-            return; // helper not on yet; ask later
-        }
-
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-
-        if (prefs.getBoolean(KEY_BATTERY_OPT_ASKED, false)) {
-            return;
-        }
-
-        PowerManager pm = getSystemService(PowerManager.class);
-
-        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) {
-            prefs.edit().putBoolean(KEY_BATTERY_OPT_ASKED, true).apply();
-            return;
-        }
-
         prefs.edit().putBoolean(KEY_BATTERY_OPT_ASKED, true).apply();
 
         try {
@@ -1197,6 +1242,25 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             Log.w(TAG, "Battery opt intent failed", e);
         }
+    }
+
+    private boolean needsXiaomiAutostart() {
+
+        if (!USSDAccessibilityService.isEnabled(this)) {
+            return false;
+        }
+
+        String manufacturer = Build.MANUFACTURER.toLowerCase();
+
+        if (!manufacturer.contains("xiaomi")
+                && !manufacturer.contains("redmi")
+                && !manufacturer.contains("poco")) {
+            return false;
+        }
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        return !prefs.getBoolean(KEY_AUTOSTART_ASKED, false);
     }
 
     /**
@@ -1210,20 +1274,11 @@ public class MainActivity extends Activity {
             return;
         }
 
-        String manufacturer = Build.MANUFACTURER.toLowerCase();
-
-        if (!manufacturer.contains("xiaomi")
-                && !manufacturer.contains("redmi")
-                && !manufacturer.contains("poco")) {
+        if (!needsXiaomiAutostart()) {
             return;
         }
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-
-        if (prefs.getBoolean(KEY_AUTOSTART_ASKED, false)) {
-            return;
-        }
-
         prefs.edit().putBoolean(KEY_AUTOSTART_ASKED, true).apply();
 
         new AlertDialog.Builder(this)
