@@ -1,6 +1,7 @@
 package com.sohan.smartussd.ussd;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -17,6 +18,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
@@ -120,28 +122,96 @@ public class USSDAccessibilityService extends AccessibilityService {
         return listener != null && instance != null;
     }
 
-    public static boolean isEnabled(Context context) {
+    /**
+     * True when the helper is connected right now. Being switched on in
+     * Settings is not enough: some phones stop the service after the app
+     * is closed, and then nobody hides or reads the system USSD dialog.
+     */
+    public static boolean isRunning() {
+        return instance != null;
+    }
+
+
+    /** True if the toggle in Accessibility settings is switched ON. */
+    public static boolean isSettingTurnedOn(Context context) {
+
+        if (context == null) {
+            return false;
+        }
 
         String enabled = Settings.Secure.getString(
                 context.getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        );
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
 
         if (TextUtils.isEmpty(enabled)) {
             return false;
         }
 
-        String me = new ComponentName(
-                context, USSDAccessibilityService.class
-        ).flattenToString();
+        ComponentName me = new ComponentName(
+                context, USSDAccessibilityService.class);
 
-        for (String s : enabled.split(":")) {
-            if (s.equalsIgnoreCase(me)) {
+        for (String entry : enabled.split(":")) {
+            ComponentName cn = ComponentName.unflattenFromString(entry);
+            if (me.equals(cn)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * True when the service is actively registered with the system
+     * and NOT marked as crashed ("Not working. Tap for info.").
+     */
+    public static boolean isEnabled(Context context) {
+
+        if (context == null) {
+            return false;
+        }
+
+        // If the switch in settings is completely off, it's not enabled
+        if (!isSettingTurnedOn(context)) {
+            return false;
+        }
+
+        // If instance is already live in memory, it is working
+        if (instance != null) {
+            return true;
+        }
+
+        // Verify with AccessibilityManager whether Android considers it active or
+        // stopped/crashed
+        try {
+            AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+
+            if (am != null && am.isEnabled()) {
+                List<AccessibilityServiceInfo> list = am.getEnabledAccessibilityServiceList(
+                        AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+
+                if (list != null) {
+                    String pkg = context.getPackageName();
+                    for (AccessibilityServiceInfo info : list) {
+                        String id = info.getId();
+                        if (id != null && id.contains(pkg)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return false;
+    }
+
+    /**
+     * True when the user turned the switch ON in Settings, but the Android
+     * system halted the service ("Not working. Tap for info."). Needs a toggle OFF
+     * then ON.
+     */
+    public static boolean isCrashedOrNotWorking(Context context) {
+        return isSettingTurnedOn(context) && !isEnabled(context);
     }
 
     /** Type a menu number / text into the system dialog and press Send. */
@@ -228,6 +298,10 @@ public class USSDAccessibilityService extends AccessibilityService {
         super.onServiceConnected();
         instance = this;
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+
+        // Start a foreground service to keep the process alive on
+        // Xiaomi / MIUI / HyperOS which kill accessibility services.
+        HelperKeepAliveService.start(this);
     }
 
     @Override
@@ -237,6 +311,10 @@ public class USSDAccessibilityService extends AccessibilityService {
         instance = null;
         listener = null;
         endListener = null;
+
+        // No longer need the keep-alive.
+        HelperKeepAliveService.stop(this);
+
         return super.onUnbind(intent);
     }
 
@@ -266,8 +344,7 @@ public class USSDAccessibilityService extends AccessibilityService {
         if (listener == null) {
 
             if (!ending && !sweeping && !guardQueued
-                    && System.currentTimeMillis() - lastOwnActivity
-                    < GUARD_WINDOW_MS) {
+                    && System.currentTimeMillis() - lastOwnActivity < GUARD_WINDOW_MS) {
 
                 guardQueued = true;
 
@@ -372,7 +449,7 @@ public class USSDAccessibilityService extends AccessibilityService {
         }
 
         // Back / Next / Home / Main are navigation, not answers: a page
-        // with only those (e.g. "Enter Amount  # Back") still needs typing.
+        // with only those (e.g. "Enter Amount # Back") still needs typing.
         boolean hasChoices = false;
 
         for (USSDMenuItem item : items) {
@@ -411,8 +488,7 @@ public class USSDAccessibilityService extends AccessibilityService {
 
         args.putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                text
-        );
+                text);
 
         edit[0].performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
 
@@ -434,10 +510,8 @@ public class USSDAccessibilityService extends AccessibilityService {
 
         lastReplyTime = System.currentTimeMillis();
 
-        handler.postDelayed(() ->
-                sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK),
-                20
-        );
+        handler.postDelayed(() -> sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK),
+                20);
 
         return true;
     }
@@ -592,8 +666,7 @@ public class USSDAccessibilityService extends AccessibilityService {
             boolean cancelDialog,
             int gen,
             int attempt,
-            Runnable done
-    ) {
+            Runnable done) {
 
         if (gen != sessionGen) {
             done.run();
@@ -619,7 +692,8 @@ public class USSDAccessibilityService extends AccessibilityService {
 
             if (isCancelText(b.getText()) == cancelDialog) {
                 clicked = b.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                if (clicked) break;
+                if (clicked)
+                    break;
             }
         }
 
@@ -657,8 +731,7 @@ public class USSDAccessibilityService extends AccessibilityService {
             String message,
             List<USSDMenuItem> items,
             boolean finalMessage,
-            boolean needsInput
-    ) {
+            boolean needsInput) {
 
         if (windowManager == null) {
             return;
@@ -686,11 +759,11 @@ public class USSDAccessibilityService extends AccessibilityService {
             styleInputFor(message);
         }
 
-        LinearLayout.LayoutParams menuParams =
-                (LinearLayout.LayoutParams) menuBox.getLayoutParams();
+        LinearLayout.LayoutParams menuParams = (LinearLayout.LayoutParams) menuBox.getLayoutParams();
 
         menuParams.topMargin = (!items.isEmpty() && !body.isEmpty())
-                ? dp(18) : 0;
+                ? dp(18)
+                : 0;
 
         menuBox.setLayoutParams(menuParams);
 
@@ -831,8 +904,8 @@ public class USSDAccessibilityService extends AccessibilityService {
             // Content scrolls clear of the pinned bar.
             final int sideTop = systemBarHeight("status_bar_height") + dp(12);
 
-            bottomBar.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
-                    column.setPadding(dp(20), sideTop, dp(20),
+            bottomBar.addOnLayoutChangeListener(
+                    (v, l, t, r, b, ol, ot, or, ob) -> column.setPadding(dp(20), sideTop, dp(20),
                             (b - t) + dp(16)));
 
             contentColumn = column;
@@ -862,14 +935,12 @@ public class USSDAccessibilityService extends AccessibilityService {
             cancel.setBackgroundResource(R.drawable.bg_button_secondary);
             cancel.setOnClickListener(v -> endSession(true));
 
-            FrameLayout.LayoutParams cancelParams =
-                    new FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.WRAP_CONTENT,
-                            FrameLayout.LayoutParams.WRAP_CONTENT,
-                            Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            FrameLayout.LayoutParams cancelParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
 
-            cancelParams.bottomMargin =
-                    systemBarHeight("navigation_bar_height") + dp(32);
+            cancelParams.bottomMargin = systemBarHeight("navigation_bar_height") + dp(32);
 
             loadingHolder.addView(cancel, cancelParams);
 
@@ -883,8 +954,7 @@ public class USSDAccessibilityService extends AccessibilityService {
                     WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                    PixelFormat.OPAQUE
-            );
+                    PixelFormat.OPAQUE);
 
             lp.gravity = Gravity.TOP | Gravity.START;
 
@@ -1144,8 +1214,7 @@ public class USSDAccessibilityService extends AccessibilityService {
 
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(54)
-        );
+                dp(54));
 
         p.topMargin = dp(16);
 
@@ -1195,7 +1264,8 @@ public class USSDAccessibilityService extends AccessibilityService {
 
     private boolean isPhonePackage(CharSequence pkg) {
 
-        if (pkg == null) return false;
+        if (pkg == null)
+            return false;
 
         String p = pkg.toString().toLowerCase();
 
@@ -1225,7 +1295,8 @@ public class USSDAccessibilityService extends AccessibilityService {
 
     private boolean isCancelText(CharSequence t) {
 
-        if (t == null) return false;
+        if (t == null)
+            return false;
 
         String s = t.toString().toLowerCase();
 
@@ -1237,22 +1308,25 @@ public class USSDAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo node,
             List<String> texts,
             List<AccessibilityNodeInfo> buttons,
-            AccessibilityNodeInfo[] edit
-    ) {
+            AccessibilityNodeInfo[] edit) {
 
-        if (node == null) return;
+        if (node == null)
+            return;
 
         String c = node.getClassName() == null
-                ? "" : node.getClassName().toString();
+                ? ""
+                : node.getClassName().toString();
 
         CharSequence text = node.getText();
 
         String id = node.getViewIdResourceName() == null
-                ? "" : node.getViewIdResourceName().toLowerCase();
+                ? ""
+                : node.getViewIdResourceName().toLowerCase();
 
         if (c.endsWith("EditText")) {
 
-            if (edit[0] == null) edit[0] = node;
+            if (edit[0] == null)
+                edit[0] = node;
 
         } else if (c.endsWith("Button")) {
 

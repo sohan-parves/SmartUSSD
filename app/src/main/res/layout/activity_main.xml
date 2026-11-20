@@ -43,6 +43,7 @@
 
         <!-- SIM SELECTOR CARD -->
         <LinearLayout
+            android:id="@+id/cardSim"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="14dp"
@@ -141,11 +142,12 @@
 
         <!-- FOOTER -->
         <TextView
+            android:id="@+id/appVersionText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
             android:padding="25dp"
-            android:text="Smart USSD • Version 1.0"
+            android:text="Smart USSD"
             android:textColor="@color/text_faint"
             android:textSize="11sp" />
 

@@ -3,17 +3,23 @@ package com.sohan.smartussd;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.text.Editable;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ArrayAdapter;
@@ -21,6 +27,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.sohan.smartussd.ui.DialPadView;
@@ -39,7 +46,11 @@ public class MainActivity extends Activity {
     private static final int REQUEST_PERMISSIONS = 100;
 
     private static final String PREFS = "smart_ussd";
-    private static final String KEY_HELPER_ASKED = "helper_asked";
+    /** Set only when the person chose "Later" / "Continue anyway". */
+    private static final String KEY_HELPER_DISMISSED = "helper_dismissed";
+    private static final String KEY_PHONE_PERM_REQUESTED = "phone_perm_requested";
+    private static final String KEY_BATTERY_OPT_ASKED = "battery_opt_asked";
+    private static final String KEY_AUTOSTART_ASKED = "autostart_asked";
     private static final String KEY_SIM = "last_sim_sub_id";
 
     /** Safety net: stop the loader if the network never answers. */
@@ -48,6 +59,7 @@ public class MainActivity extends Activity {
     private static final String HINT_CODE = "*121#";
     private static final String HINT_REPLY = "Reply";
 
+    private TextView statusPill;
     private Spinner simSpinner;
     private EditText ussdInput;
     private Button btnSend;
@@ -87,6 +99,9 @@ public class MainActivity extends Activity {
     /** True while the "permission needed" screen is on screen. */
     private boolean permissionErrorShown = false;
 
+    /** True if the user opened App Settings to grant permissions manually. */
+    private boolean awaitingSettings = false;
+
     /** The helper guide is offered once per app run when dialling. */
     private boolean helperPromptedThisRun = false;
 
@@ -99,6 +114,7 @@ public class MainActivity extends Activity {
 
         setContentView(R.layout.activity_main);
 
+        statusPill = findViewById(R.id.statusPill);
         simSpinner = findViewById(R.id.simSpinner);
         ussdInput = findViewById(R.id.ussdInput);
         btnSend = findViewById(R.id.btnSend);
@@ -109,10 +125,11 @@ public class MainActivity extends Activity {
 
         ussdManager = new USSDManager(this);
 
-        subscriptionManager =
-                getSystemService(SubscriptionManager.class);
+        subscriptionManager = getSystemService(SubscriptionManager.class);
 
         setupKeypad();
+
+        setupPermissionTriggers();
 
         runSplash(savedInstanceState == null);
 
@@ -122,10 +139,35 @@ public class MainActivity extends Activity {
             panel.hideLoading();
         });
 
+        updateStatusPill();
+
+        setupVersionFooter();
+
         // Ask for everything the app needs, right at the first start.
         checkPermissions();
 
         btnSend.setOnClickListener(v -> onSendClicked());
+    }
+
+    private void setupVersionFooter() {
+        TextView appVersionText = findViewById(R.id.appVersionText);
+        if (appVersionText != null) {
+            appVersionText.setText("Smart USSD • Version " + getAppVersionName());
+        }
+    }
+
+    private String getAppVersionName() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                return getPackageManager().getPackageInfo(
+                        getPackageName(),
+                        PackageManager.PackageInfoFlags.of(0)).versionName;
+            } else {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            }
+        } catch (Exception e) {
+            return "1.0.0";
+        }
     }
 
     /* ---------------- Launch splash ---------------- */
@@ -158,12 +200,11 @@ public class MainActivity extends Activity {
         name.animate().alpha(1f).setStartDelay(150).setDuration(300).start();
         tag.animate().alpha(1f).setStartDelay(260).setDuration(300).start();
 
-        handler.postDelayed(() ->
-                        splash.animate()
-                                .alpha(0f)
-                                .setDuration(260)
-                                .withEndAction(() -> splash.setVisibility(View.GONE))
-                                .start(),
+        handler.postDelayed(() -> splash.animate()
+                .alpha(0f)
+                .setDuration(260)
+                .withEndAction(() -> splash.setVisibility(View.GONE))
+                .start(),
                 850);
     }
 
@@ -183,8 +224,7 @@ public class MainActivity extends Activity {
             ussdInput.getText().replace(
                     Math.min(start, end),
                     Math.max(start, end),
-                    key
-            );
+                    key);
         });
 
         btnBackspace.setOnClickListener(v -> {
@@ -209,6 +249,126 @@ public class MainActivity extends Activity {
 
     /* ---------------- Permissions & SIMs ---------------- */
 
+    private void setupPermissionTriggers() {
+        if (simSpinner != null) {
+            simSpinner.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    if (!hasRuntimePermissions()) {
+                        requestOrExplainPermissions();
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        View cardSim = findViewById(R.id.cardSim);
+        if (cardSim != null) {
+            cardSim.setOnClickListener(v -> {
+                if (!hasRuntimePermissions()) {
+                    requestOrExplainPermissions();
+                }
+            });
+        }
+    }
+
+    private void updateStatusPill() {
+        if (statusPill == null) {
+            return;
+        }
+
+        if (!hasRuntimePermissions()) {
+            statusPill.setText("● PERMISSION NEEDED");
+            statusPill.setTextColor(getColor(R.color.error));
+            statusPill.setBackground(pillDrawable(getColor(R.color.error_soft)));
+            statusPill.setOnClickListener(v -> requestOrExplainPermissions());
+        } else if (USSDAccessibilityService.isCrashedOrNotWorking(this)) {
+            statusPill.setText("● RESTART HELPER");
+            statusPill.setTextColor(getColor(R.color.error));
+            statusPill.setBackground(pillDrawable(getColor(R.color.error_soft)));
+            statusPill.setOnClickListener(v -> showHelperGuideManual());
+        } else if (!USSDAccessibilityService.isEnabled(this)) {
+            statusPill.setText("● HELPER OFF");
+            statusPill.setTextColor(getColor(R.color.warning));
+            statusPill.setBackground(pillDrawable(getColor(R.color.warning_soft)));
+            statusPill.setOnClickListener(v -> showHelperGuideManual());
+        } else {
+            statusPill.setText("● READY");
+            statusPill.setTextColor(getColor(R.color.success));
+            statusPill.setBackground(pillDrawable(getColor(R.color.success_soft)));
+            statusPill.setOnClickListener(
+                    v -> Toast.makeText(this, "Smart USSD is ready: SIM & Helper active", Toast.LENGTH_SHORT).show());
+        }
+    }
+
+    private GradientDrawable pillDrawable(int fillColor) {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.RECTANGLE);
+        d.setCornerRadius(dp(50));
+        d.setColor(fillColor);
+        return d;
+    }
+
+    private float dp(float value) {
+        return value * getResources().getDisplayMetrics().density;
+    }
+
+    private void showHelperGuideManual() {
+        helperGuideShown = true;
+        if (USSDAccessibilityService.isCrashedOrNotWorking(this)) {
+            panel.showHelperRestartGuide(
+                    () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    () -> {
+                        helperGuideShown = false;
+                        panel.hideError();
+                        updateStatusPill();
+                    });
+        } else {
+            panel.showHelperGuide(
+                    () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    () -> {
+                        helperGuideShown = false;
+                        panel.hideError();
+                        updateStatusPill();
+                    });
+        }
+    }
+
+    private void requestOrExplainPermissions() {
+        if (hasRuntimePermissions()) {
+            if (simList.isEmpty()) {
+                loadSIMs();
+            }
+            updateStatusPill();
+            return;
+        }
+
+        boolean hasRequestedBefore = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_PHONE_PERM_REQUESTED, false);
+
+        boolean canAskAgain = false;
+        String[] permissions = {
+                Manifest.permission.CALL_PHONE,
+                Manifest.permission.READ_PHONE_STATE
+        };
+        for (String permission : permissions) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                if (shouldShowRequestPermissionRationale(permission)) {
+                    canAskAgain = true;
+                    break;
+                }
+            }
+        }
+
+        if (canAskAgain || !hasRequestedBefore) {
+            checkPermissions();
+        } else {
+            showPermissionNeeded();
+        }
+    }
+
     private void checkPermissions() {
 
         String[] permissions = {
@@ -220,8 +380,7 @@ public class MainActivity extends Activity {
 
         for (String permission : permissions) {
 
-            if (checkSelfPermission(permission)
-                    != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
 
                 missing.add(permission);
             }
@@ -229,14 +388,17 @@ public class MainActivity extends Activity {
 
         if (!missing.isEmpty()) {
 
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(KEY_PHONE_PERM_REQUESTED, true).apply();
+
             requestPermissions(
                     missing.toArray(new String[0]),
-                    REQUEST_PERMISSIONS
-            );
+                    REQUEST_PERMISSIONS);
 
         } else {
 
             loadSIMs();
+            updateStatusPill();
             askForHelperOnce();
         }
     }
@@ -264,7 +426,13 @@ public class MainActivity extends Activity {
 
             if (granted) {
 
+                if (permissionErrorShown) {
+                    permissionErrorShown = false;
+                    panel.hideError();
+                }
+
                 loadSIMs();
+                updateStatusPill();
 
                 if (pendingCode != null) {
 
@@ -279,7 +447,11 @@ public class MainActivity extends Activity {
 
             } else {
 
-                pendingCode = null;
+                updateStatusPill();
+                updateSimCardView();
+
+                // Keep the typed code: it is sent as soon as the
+                // permission is allowed (also after the settings page).
                 showPermissionNeeded();
             }
         }
@@ -287,93 +459,174 @@ public class MainActivity extends Activity {
 
     private boolean hasRuntimePermissions() {
 
-        return checkSelfPermission(Manifest.permission.CALL_PHONE)
-                == PackageManager.PERMISSION_GRANTED
-                && checkSelfPermission(Manifest.permission.READ_PHONE_STATE)
-                == PackageManager.PERMISSION_GRANTED;
+        return checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED;
     }
 
     /** Friendly screen when the phone permissions were refused. */
     private void showPermissionNeeded() {
 
-        boolean canAskAgain =
-                shouldShowRequestPermissionRationale(
-                        Manifest.permission.CALL_PHONE)
-                        || shouldShowRequestPermissionRationale(
-                        Manifest.permission.READ_PHONE_STATE);
+        boolean canAskAgain = false;
+        String[] permissions = {
+                Manifest.permission.CALL_PHONE,
+                Manifest.permission.READ_PHONE_STATE
+        };
+        for (String permission : permissions) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                if (shouldShowRequestPermissionRationale(permission)) {
+                    canAskAgain = true;
+                    break;
+                }
+            }
+        }
 
         permissionErrorShown = true;
 
-        panel.showError(
-                false,
-                "Permission needed",
-                "Smart USSD needs the Phone permission to send your USSD "
-                        + "code through the SIM you pick. Nothing is sent "
-                        + "until you allow it.",
-                null,
-                canAskAgain ? "Allow permission" : "Open app settings",
-                () -> {
-
-                    panel.hideError();
-                    permissionErrorShown = false;
-
-                    if (canAskAgain) {
+        if (canAskAgain) {
+            panel.showError(
+                    false,
+                    "Permission needed",
+                    "Smart USSD needs Phone permissions (Call & SIM access) "
+                            + "to send your USSD code through the SIM you pick. "
+                            + "Nothing is sent until you allow it.",
+                    null,
+                    "Allow permission",
+                    () -> {
+                        panel.hideError();
+                        permissionErrorShown = false;
                         checkPermissions();
-                    } else {
-                        startActivity(new Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                android.net.Uri.parse(
-                                        "package:" + getPackageName())));
-                    }
-                },
-                "Close",
-                () -> {
-                    permissionErrorShown = false;
-                    panel.hideError();
-                });
+                    },
+                    "Open app settings",
+                    this::openAppSettings);
+        } else {
+            panel.showError(
+                    false,
+                    "Permission needed",
+                    "Phone permission is required to detect SIM cards and dial "
+                            + "USSD codes. Please turn ON Phone permission in App Settings.",
+                    null,
+                    "Open app settings",
+                    this::openAppSettings,
+                    "Close",
+                    () -> {
+                        permissionErrorShown = false;
+                        pendingCode = null;
+                        panel.hideError();
+                        updateStatusPill();
+                        updateSimCardView();
+                    });
+        }
+    }
+
+    private void openAppSettings() {
+        awaitingSettings = true;
+        startActivity(new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:" + getPackageName())));
     }
 
     /**
      * The accessibility helper is the last permission the app needs. It
      * is offered once, right after the phone permissions.
      */
+    /** True once the person chose "Later" / "Continue anyway" (saved for good). */
+    private boolean helperDismissed() {
+
+        return getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_HELPER_DISMISSED, false);
+    }
+
+    /** Remembers for good: never show the helper guide again. */
+    private void markHelperDismissed() {
+
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_HELPER_DISMISSED, true).apply();
+    }
+
     private void askForHelperOnce() {
 
-        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-
+        // Ask until the person decides; never when it is on,
+        // and not twice in the same run.
         if (USSDAccessibilityService.isEnabled(this)
-                || prefs.getBoolean(KEY_HELPER_ASKED, false)
+                || helperPromptedThisRun
                 || isFinishing()) {
             return;
         }
-
-        prefs.edit().putBoolean(KEY_HELPER_ASKED, true).apply();
 
         // Full-page step-by-step guide instead of a plain dialog.
         helperGuideShown = true;
         helperPromptedThisRun = true;
 
-        panel.showHelperGuide(
-                () -> startActivity(new Intent(
-                        Settings.ACTION_ACCESSIBILITY_SETTINGS)),
-                "Later",
-                () -> {
-                    helperGuideShown = false;
-                    panel.hideError();
-                });
+        if (USSDAccessibilityService.isCrashedOrNotWorking(this)) {
+            panel.showHelperRestartGuide(
+                    () -> startActivity(new Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    () -> {
+                        helperGuideShown = false;
+                        panel.hideError();
+                        updateStatusPill();
+                    });
+        } else {
+            panel.showHelperGuide(
+                    () -> startActivity(new Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    () -> {
+                        helperGuideShown = false;
+                        panel.hideError();
+                        updateStatusPill();
+                    });
+        }
+    }
+
+    private void updateSimCardView() {
+        if (!hasRuntimePermissions()) {
+            List<String> list = new ArrayList<>();
+            list.add("⚠️ Tap to allow Phone permission");
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                    this,
+                    R.layout.item_spinner,
+                    list);
+            adapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            simSpinner.setAdapter(adapter);
+        } else if (simList.isEmpty()) {
+            List<String> list = new ArrayList<>();
+            list.add("No active SIM card found");
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                    this,
+                    R.layout.item_spinner,
+                    list);
+            adapter.setDropDownViewResource(R.layout.item_spinner_dropdown);
+            simSpinner.setAdapter(adapter);
+        }
     }
 
     private void loadSIMs() {
 
+        if (!hasRuntimePermissions()) {
+            updateSimCardView();
+            return;
+        }
+
+        if (subscriptionManager == null) {
+            subscriptionManager = getSystemService(SubscriptionManager.class);
+        }
+
+        if (subscriptionManager == null) {
+            updateSimCardView();
+            return;
+        }
+
         try {
 
-            simList =
-                    subscriptionManager
-                            .getActiveSubscriptionInfoList();
+            simList = subscriptionManager
+                    .getActiveSubscriptionInfoList();
 
             if (simList == null || simList.isEmpty()) {
 
                 simList = new ArrayList<>();
+                updateSimCardView();
                 return;
             }
 
@@ -381,23 +634,19 @@ public class MainActivity extends Activity {
 
             for (SubscriptionInfo info : simList) {
 
-                String name =
-                        "SIM " + (info.getSimSlotIndex() + 1)
-                                + " - " + info.getDisplayName();
+                String name = "SIM " + (info.getSimSlotIndex() + 1)
+                        + " - " + info.getDisplayName();
 
                 simNames.add(name);
             }
 
-            ArrayAdapter<String> adapter =
-                    new ArrayAdapter<>(
-                            this,
-                            R.layout.item_spinner,
-                            simNames
-                    );
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                    this,
+                    R.layout.item_spinner,
+                    simNames);
 
             adapter.setDropDownViewResource(
-                    R.layout.item_spinner_dropdown
-            );
+                    R.layout.item_spinner_dropdown);
 
             simSpinner.setAdapter(adapter);
 
@@ -415,6 +664,7 @@ public class MainActivity extends Activity {
         } catch (SecurityException e) {
 
             Log.w(TAG, "SIM list not permitted", e);
+            updateSimCardView();
         }
     }
 
@@ -454,7 +704,7 @@ public class MainActivity extends Activity {
         if (!hasRuntimePermissions()) {
 
             pendingCode = code;
-            checkPermissions();
+            requestOrExplainPermissions();
             return;
         }
 
@@ -466,34 +716,49 @@ public class MainActivity extends Activity {
                 || simSpinner.getSelectedItemPosition() < 0) {
 
             Feedback.reject(simSpinner);
+
+            panel.showError(
+                    false,
+                    "No SIM found",
+                    "Smart USSD could not find an active SIM card. Insert a "
+                            + "SIM (or turn it on in Settings), then dial again.",
+                    null,
+                    null,
+                    null,
+                    "Close",
+                    panel::hideError);
+
             return;
         }
 
-        // 2) The USSD helper (Accessibility) gives the full experience:
-        //    offer it once per run, with a way to continue without it.
-        if (!USSDAccessibilityService.isEnabled(this)
-                && !helperPromptedThisRun) {
-
-            helperPromptedThisRun = true;
-            helperGuideShown = true;
+        // 2) USSD Helper (Accessibility Service) is required:
+        // Never send request if Helper is OFF. Ask to enable it.
+        if (!USSDAccessibilityService.isEnabled(this)) {
             pendingCode = code;
-
-            panel.showHelperGuide(
-                    () -> startActivity(new Intent(
-                            Settings.ACTION_ACCESSIBILITY_SETTINGS)),
-                    "Continue anyway",
-                    () -> {
-                        helperGuideShown = false;
-                        panel.hideError();
-
-                        String c = pendingCode;
-                        pendingCode = null;
-
-                        if (c != null) {
-                            startNewCode(c);
-                        }
-                    });
-
+            helperGuideShown = true;
+            if (USSDAccessibilityService.isCrashedOrNotWorking(this)) {
+                panel.showHelperRestartGuide(
+                        () -> startActivity(new Intent(
+                                Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                        "Close",
+                        () -> {
+                            helperGuideShown = false;
+                            pendingCode = null;
+                            panel.hideError();
+                            updateStatusPill();
+                        });
+            } else {
+                panel.showHelperGuide(
+                        () -> startActivity(new Intent(
+                                Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                        "Close",
+                        () -> {
+                            helperGuideShown = false;
+                            pendingCode = null;
+                            panel.hideError();
+                            updateStatusPill();
+                        });
+            }
             return;
         }
 
@@ -550,8 +815,7 @@ public class MainActivity extends Activity {
                         ussdInput.setText("");
                         ussdInput.setHint(HINT_REPLY);
 
-                        panel.showResponse(response, item ->
-                                sendChoice(item.getNumber(), item.isBack()));
+                        panel.showResponse(response, item -> sendChoice(item.getNumber(), item.isBack()));
                     }
 
                     @Override
@@ -582,8 +846,7 @@ public class MainActivity extends Activity {
                         resetSession();
                         panel.resetAll();
                     }
-                }
-        );
+                });
     }
 
     /**
@@ -682,8 +945,7 @@ public class MainActivity extends Activity {
                     startNewCode(retryCode);
                 },
                 "Dial a new code",
-                panel::hideError
-        );
+                panel::hideError);
 
         Feedback.reject(ussdInput);
     }
@@ -718,13 +980,28 @@ public class MainActivity extends Activity {
 
         resetSession();
 
+        // Permission was taken away: ask again, then send the same code.
+        if (errorCode == USSDManager.ERR_NO_PERMISSION
+                && !hasRuntimePermissions()) {
+
+            pendingCode = lastCode.isEmpty() ? null : lastCode;
+            requestOrExplainPermissions();
+            return;
+        }
+
         if (USSDManager.canFixWithAccessibility(this, errorCode)) {
 
             helperGuideShown = true;
 
-            panel.showHelperGuide(() ->
-                    startActivity(new Intent(
-                            Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+            panel.showHelperGuide(
+                    () -> startActivity(new Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    () -> {
+                        helperGuideShown = false;
+                        panel.hideError();
+                        updateStatusPill();
+                    });
 
             return;
         }
@@ -742,8 +1019,7 @@ public class MainActivity extends Activity {
                     startNewCode(retryCode);
                 },
                 "Dial a new code",
-                panel::hideError
-        );
+                panel::hideError);
 
         Feedback.reject(ussdInput);
     }
@@ -755,30 +1031,61 @@ public class MainActivity extends Activity {
 
         // Never leave the system "Carrier info" dialog behind our screens.
         if (!busy && !sessionActive) {
-            USSDAccessibilityService.closeLeftoverDialog();
+
+            if (ussdManager.hasDialerSession()) {
+
+                // A session from before the app was closed is still open
+                // (its system dialog would pop up again): end it now.
+                ussdManager.cancelSession();
+                panel.resetAll();
+
+            } else {
+
+                USSDAccessibilityService.closeLeftoverDialog();
+            }
         }
 
-        // Back from app settings with the permissions allowed.
-        if (permissionErrorShown && hasRuntimePermissions()) {
+        if (hasRuntimePermissions()) {
+            if (permissionErrorShown) {
+                permissionErrorShown = false;
+                panel.hideError();
+            }
+            awaitingSettings = false;
 
-            permissionErrorShown = false;
-            panel.hideError();
-            loadSIMs();
-        }
+            if (simList.isEmpty()) {
+                loadSIMs();
+            }
+            updateStatusPill();
 
-        // Back from Accessibility settings with the helper on: continue.
-        if (helperGuideShown
-                && USSDAccessibilityService.isEnabled(this)) {
+            if (helperGuideShown && USSDAccessibilityService.isEnabled(this)) {
+                helperGuideShown = false;
+                panel.hideError();
+            }
 
-            helperGuideShown = false;
-            panel.hideError();
-
-            // Helper just turned on: send the code the person dialled.
-            if (pendingCode != null) {
-
+            // If helper is enabled and there is a pending code, send it
+            if (pendingCode != null && USSDAccessibilityService.isEnabled(this)) {
                 String code = pendingCode;
                 pendingCode = null;
                 startNewCode(code);
+            } else if (!USSDAccessibilityService.isEnabled(this)
+                    && !helperPromptedThisRun) {
+                askForHelperOnce();
+            }
+
+            // One-time: request battery optimisation exemption so the
+            // foreground service (and therefore the accessibility service)
+            // is never killed.
+            requestBatteryOptimisation();
+
+            // One-time: Xiaomi autostart guide
+            promptXiaomiAutostart();
+        } else {
+            updateStatusPill();
+            updateSimCardView();
+
+            if (awaitingSettings) {
+                awaitingSettings = false;
+                showPermissionNeeded();
             }
         }
     }
@@ -822,6 +1129,8 @@ public class MainActivity extends Activity {
             permissionErrorShown = false;
             pendingCode = null;
             panel.hideError();
+            updateStatusPill();
+            updateSimCardView();
 
         } else if (panel.isLoading()) {
 
@@ -848,6 +1157,118 @@ public class MainActivity extends Activity {
 
         if (ussdManager != null) {
             ussdManager.cancelSession();
+        }
+    }
+
+    /* ---- Battery optimisation & Xiaomi autostart (one-time) ---- */
+
+    /**
+     * Ask the system to exempt the app from battery optimisation.
+     * This prevents Xiaomi/MIUI from killing the foreground service
+     * that keeps the accessibility helper alive.
+     * Asked only once; the user can decline.
+     */
+    private void requestBatteryOptimisation() {
+
+        if (!USSDAccessibilityService.isEnabled(this)) {
+            return; // helper not on yet; ask later
+        }
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        if (prefs.getBoolean(KEY_BATTERY_OPT_ASKED, false)) {
+            return;
+        }
+
+        PowerManager pm = getSystemService(PowerManager.class);
+
+        if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName())) {
+            prefs.edit().putBoolean(KEY_BATTERY_OPT_ASKED, true).apply();
+            return;
+        }
+
+        prefs.edit().putBoolean(KEY_BATTERY_OPT_ASKED, true).apply();
+
+        try {
+            Intent intent = new Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            Log.w(TAG, "Battery opt intent failed", e);
+        }
+    }
+
+    /**
+     * On Xiaomi / Redmi / POCO devices, show a one-time dialog guiding
+     * the user to enable "Autostart" and set battery saver to
+     * "No restrictions" so the system never kills our service.
+     */
+    private void promptXiaomiAutostart() {
+
+        if (!USSDAccessibilityService.isEnabled(this)) {
+            return;
+        }
+
+        String manufacturer = Build.MANUFACTURER.toLowerCase();
+
+        if (!manufacturer.contains("xiaomi")
+                && !manufacturer.contains("redmi")
+                && !manufacturer.contains("poco")) {
+            return;
+        }
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        if (prefs.getBoolean(KEY_AUTOSTART_ASKED, false)) {
+            return;
+        }
+
+        prefs.edit().putBoolean(KEY_AUTOSTART_ASKED, true).apply();
+
+        new AlertDialog.Builder(this)
+                .setTitle("Keep USSD helper running")
+                .setMessage(
+                        "Your " + Build.MANUFACTURER + " phone may stop "
+                                + "the USSD helper when you close the app.\n\n"
+                                + "To fix this permanently:\n"
+                                + "1. Turn on \"Autostart\" for Smart USSD\n"
+                                + "2. Set Battery Saver to \"No restrictions\"\n\n"
+                                + "Tap \"Open settings\" to go there now.")
+                .setPositiveButton("Open settings", (d, w) -> {
+                    openXiaomiAutostart();
+                })
+                .setNegativeButton("Later", null)
+                .show();
+    }
+
+    private void openXiaomiAutostart() {
+
+        // Try the MIUI autostart manager
+        ComponentName[] xiaomiComponents = {
+                new ComponentName("com.miui.securitycenter",
+                        "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+                new ComponentName("com.miui.securitycenter",
+                        "com.miui.powercenter.PowerSettings"),
+        };
+
+        for (ComponentName cn : xiaomiComponents) {
+            try {
+                Intent intent = new Intent();
+                intent.setComponent(cn);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Fallback: open the app's own battery settings
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception ignored) {
         }
     }
 }

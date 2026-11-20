@@ -156,6 +156,32 @@ public class ResponsePanel {
                 onSecondary);
     }
 
+    /** Guide when the service stopped ("Not working. Tap for info.") and needs a quick toggle. */
+    public void showHelperRestartGuide(
+            Runnable openSettings,
+            String secondaryLabel,
+            Runnable onSecondary
+    ) {
+        loading.hideNow();
+
+        errorView.show(
+                ErrorView.Kind.TIMEOUT,
+                "Restart USSD helper",
+                "The helper service stopped when the app was closed (\"Not working. Tap for info.\"). A quick OFF/ON toggle will reactivate it.",
+                null,
+                new String[]{
+                        "Tap the button below to open Accessibility settings.",
+                        "Tap Smart USSD (which says \"Not working. Tap for info.\").",
+                        "Turn the switch OFF, then turn it back ON.",
+                        "Come back here and your USSD will dial automatically.",
+                        "Tip: In Settings › Apps › Smart USSD, turn on \"Autostart\" and set Battery Saver to \"No restrictions\" so it never stops."
+                },
+                "Open Accessibility settings",
+                openSettings,
+                secondaryLabel,
+                onSecondary);
+    }
+
     public void hideError() {
         errorView.hide();
     }

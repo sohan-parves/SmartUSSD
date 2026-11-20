@@ -188,16 +188,18 @@ public class USSDMenuAdapter {
             button.setTextColor(context.getColor(R.color.accent));
             button.setTextSize(15);
             button.setTypeface(button.getTypeface(), android.graphics.Typeface.BOLD);
-            button.setMinHeight(dp(54));
-            button.setPadding(dp(10), dp(8), dp(10), dp(8));
+            button.setMaxLines(2);
+            button.setIncludeFontPadding(false);
+            button.setPadding(dp(6), dp(8), dp(6), dp(8));
             button.setBackgroundResource(R.drawable.bg_button_highlight);
             button.setClickable(true);
             button.setFocusable(true);
 
+            // Same fixed height for every button, so they line up.
             LinearLayout.LayoutParams params =
                     new LinearLayout.LayoutParams(
                             0,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            dp(64),
                             1f
                     );
 
@@ -263,14 +265,17 @@ public class USSDMenuAdapter {
         });
     }
 
-    /** "Back  (0)" with the key number shown bigger, bold and bright. */
+    /**
+     * Two fixed lines so every navigation button looks the same:
+     * the title on top, the key to press (0, #, *, +) below it.
+     */
     private CharSequence label(USSDMenuItem item) {
 
         String prefix = item.isBack() ? "\u2039  "
                 : item.getNumber().equals("+") ? "\u00AB  " : "";
         String suffix = item.getNumber().equals("*") ? "  \u203A" : "";
 
-        String text = prefix + item.getTitle() + suffix + "   ";
+        String text = prefix + item.getTitle() + suffix + "\n";
         String number = item.getNumber();
 
         SpannableString out = new SpannableString(text + number);
@@ -283,7 +288,7 @@ public class USSDMenuAdapter {
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         out.setSpan(new StyleSpan(Typeface.BOLD),
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        out.setSpan(new RelativeSizeSpan(1.25f),
+        out.setSpan(new RelativeSizeSpan(1.3f),
                 start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
         return out;

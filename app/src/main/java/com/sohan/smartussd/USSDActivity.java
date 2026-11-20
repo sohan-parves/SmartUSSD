@@ -8,6 +8,7 @@ import android.util.Log;
 
 import com.sohan.smartussd.models.USSDMenuItem;
 import com.sohan.smartussd.ui.ResponsePanel;
+import com.sohan.smartussd.ussd.USSDAccessibilityService;
 import com.sohan.smartussd.ussd.USSDManager;
 import com.sohan.smartussd.ussd.USSDSession;
 
@@ -38,8 +39,7 @@ public class USSDActivity extends Activity {
         session = new USSDSession();
 
         subscriptionId = getIntent().getIntExtra(
-                "subscriptionId", -1
-        );
+                "subscriptionId", -1);
 
         String code = getIntent().getStringExtra("ussdCode");
 
@@ -52,6 +52,15 @@ public class USSDActivity extends Activity {
         pathCode = code;
 
         session.start(subscriptionId, code);
+
+        if (!USSDAccessibilityService.isEnabled(this)) {
+            panel.showHelperGuide(
+                    () -> startActivity(new Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    this::finish);
+            return;
+        }
 
         sendRequest(code);
     }
@@ -93,8 +102,7 @@ public class USSDActivity extends Activity {
                     public void onSessionClosed() {
                         finish();
                     }
-                }
-        );
+                });
     }
 
     private void showRefused(String text) {
@@ -114,8 +122,7 @@ public class USSDActivity extends Activity {
                     sendRequest(firstCode);
                 },
                 "Close",
-                this::finish
-        );
+                this::finish);
     }
 
     private void showFailure(int errorCode) {
@@ -125,8 +132,11 @@ public class USSDActivity extends Activity {
 
         if (USSDManager.canFixWithAccessibility(this, errorCode)) {
 
-            panel.showHelperGuide(() -> startActivity(new Intent(
-                    Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+            panel.showHelperGuide(
+                    () -> startActivity(new Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    "Close",
+                    this::finish);
 
             return;
         }
@@ -146,8 +156,7 @@ public class USSDActivity extends Activity {
                     sendRequest(firstCode);
                 },
                 "Close",
-                this::finish
-        );
+                this::finish);
     }
 
     private void onMenuChosen(USSDMenuItem item) {

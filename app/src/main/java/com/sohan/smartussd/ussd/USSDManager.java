@@ -53,8 +53,7 @@ public class USSDManager {
     public static final int MAX_AUTO_RETRIES = 0;
 
     /** Longest a screen should wait: every attempt + its retries. */
-    public static final long TOTAL_WAIT_MS =
-            FALLBACK_TIMEOUT_MS + RETRY_AFTER_MS * MAX_AUTO_RETRIES + 4000;
+    public static final long TOTAL_WAIT_MS = FALLBACK_TIMEOUT_MS + RETRY_AFTER_MS * MAX_AUTO_RETRIES + 4000;
 
     public interface USSDCallback {
 
@@ -68,8 +67,7 @@ public class USSDManager {
 
     private final Context context;
 
-    private final Handler mainHandler =
-            new Handler(Looper.getMainLooper());
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     /** Pending "network never answered" timer of the dialer fallback. */
     private Runnable pendingTimeout;
@@ -85,8 +83,7 @@ public class USSDManager {
     public void sendRequest(
             int subscriptionId,
             String ussdCode,
-            USSDCallback callback
-    ) {
+            USSDCallback callback) {
 
         cancelRetry();
 
@@ -102,8 +99,7 @@ public class USSDManager {
             final int subscriptionId,
             final String ussdCode,
             final USSDCallback callback,
-            final int retriesDone
-    ) {
+            final int retriesDone) {
 
         final int seq = ++attemptSeq;
 
@@ -112,21 +108,24 @@ public class USSDManager {
 
             @Override
             public void onSuccess(String response) {
-                if (seq != attemptSeq) return;
+                if (seq != attemptSeq)
+                    return;
                 cancelRetry();
                 callback.onSuccess(response);
             }
 
             @Override
             public void onFailure(int errorCode) {
-                if (seq != attemptSeq) return;
+                if (seq != attemptSeq)
+                    return;
                 cancelRetry();
                 callback.onFailure(errorCode);
             }
 
             @Override
             public void onSessionClosed() {
-                if (seq != attemptSeq) return;
+                if (seq != attemptSeq)
+                    return;
                 cancelRetry();
                 callback.onSessionClosed();
             }
@@ -160,8 +159,7 @@ public class USSDManager {
             int subscriptionId,
             String ussdCode,
             USSDCallback callback,
-            int retriesDone
-    ) {
+            int retriesDone) {
 
         // Old fallback timer / listeners must not fire for the dropped try.
         clearTimers();
@@ -170,9 +168,8 @@ public class USSDManager {
         if (USSDAccessibilityService.isEnabled(context)) {
 
             // Close the stuck system dialog behind the loader, then dial.
-            USSDAccessibilityService.restartQuietly(() ->
-                    startAttempt(subscriptionId, ussdCode,
-                            callback, retriesDone));
+            USSDAccessibilityService.restartQuietly(() -> startAttempt(subscriptionId, ussdCode,
+                    callback, retriesDone));
 
         } else {
 
@@ -191,11 +188,9 @@ public class USSDManager {
     private void dispatch(
             int subscriptionId,
             String ussdCode,
-            USSDCallback callback
-    ) {
+            USSDCallback callback) {
 
-        if (context.checkSelfPermission(Manifest.permission.CALL_PHONE)
-                != PackageManager.PERMISSION_GRANTED) {
+        if (context.checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
 
             deliverFailure(callback, ERR_NO_PERMISSION);
             return;
@@ -228,10 +223,8 @@ public class USSDManager {
 
         try {
 
-            TelephonyManager baseManager =
-                    (TelephonyManager) context.getSystemService(
-                            Context.TELEPHONY_SERVICE
-                    );
+            TelephonyManager baseManager = (TelephonyManager) context.getSystemService(
+                    Context.TELEPHONY_SERVICE);
 
             if (baseManager == null) {
 
@@ -239,8 +232,7 @@ public class USSDManager {
                 return;
             }
 
-            TelephonyManager simManager =
-                    baseManager.createForSubscriptionId(subscriptionId);
+            TelephonyManager simManager = baseManager.createForSubscriptionId(subscriptionId);
 
             if (simManager == null) {
 
@@ -257,8 +249,7 @@ public class USSDManager {
                         public void onReceiveUssdResponse(
                                 TelephonyManager manager,
                                 String request,
-                                CharSequence response
-                        ) {
+                                CharSequence response) {
 
                             String result = response == null
                                     ? ""
@@ -275,8 +266,7 @@ public class USSDManager {
                         public void onReceiveUssdResponseFailed(
                                 TelephonyManager manager,
                                 String request,
-                                int failureCode
-                        ) {
+                                int failureCode) {
 
                             // API failed (very common on MIUI / some operators).
                             // Try the dialer + accessibility fallback.
@@ -297,8 +287,7 @@ public class USSDManager {
                         }
                     },
 
-                    mainHandler
-            );
+                    mainHandler);
 
         } catch (SecurityException e) {
 
@@ -326,6 +315,8 @@ public class USSDManager {
             USSDCallback callback
     ) {
 
+        // Helper off: the system dialog could not be hidden or read,
+        // so do not open it at all.
         if (!USSDAccessibilityService.isEnabled(context)) {
             return false;
         }
@@ -428,7 +419,7 @@ public class USSDManager {
     public void cancelSession() {
 
         cancelRetry();
-        attemptSeq++;   // late answers of an older attempt are ignored
+        attemptSeq++; // late answers of an older attempt are ignored
 
         clearTimers();
 
@@ -460,11 +451,9 @@ public class USSDManager {
 
         try {
 
-            SubscriptionManager sm =
-                    context.getSystemService(SubscriptionManager.class);
+            SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
 
-            SubscriptionInfo info =
-                    sm.getActiveSubscriptionInfo(subscriptionId);
+            SubscriptionInfo info = sm.getActiveSubscriptionInfo(subscriptionId);
 
             if (info != null) {
                 slot = info.getSimSlotIndex();
@@ -486,13 +475,10 @@ public class USSDManager {
 
         try {
 
-            TelecomManager telecom =
-                    (TelecomManager) context.getSystemService(
-                            Context.TELECOM_SERVICE
-                    );
+            TelecomManager telecom = (TelecomManager) context.getSystemService(
+                    Context.TELECOM_SERVICE);
 
-            List<PhoneAccountHandle> accounts =
-                    telecom.getCallCapablePhoneAccounts();
+            List<PhoneAccountHandle> accounts = telecom.getCallCapablePhoneAccounts();
 
             if (accounts == null || accounts.isEmpty()) {
                 return;
@@ -504,7 +490,8 @@ public class USSDManager {
 
                 String id = handle.getId();
 
-                if (id == null) continue;
+                if (id == null)
+                    continue;
 
                 if (id.equals(String.valueOf(subscriptionId))
                         || (iccId != null && id.contains(iccId))) {
@@ -521,8 +508,7 @@ public class USSDManager {
             if (chosen != null) {
                 intent.putExtra(
                         TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
-                        chosen
-                );
+                        chosen);
             }
 
         } catch (SecurityException ignored) {
@@ -663,9 +649,9 @@ public class USSDManager {
 
         return !USSDAccessibilityService.isEnabled(context)
                 && (code == ERR_FRAMEWORK_FAILURE
-                || code == ERR_SERVICE_UNAVAILABLE
-                || code == ERR_UNSUPPORTED
-                || code == ERR_API_TOO_LOW);
+                        || code == ERR_SERVICE_UNAVAILABLE
+                        || code == ERR_UNSUPPORTED
+                        || code == ERR_API_TOO_LOW);
     }
 
     public static void promptEnableAccessibility(Activity activity) {
@@ -676,20 +662,16 @@ public class USSDManager {
                         "Your phone blocked the direct USSD request. "
                                 + "Enable \"Smart USSD\" in Accessibility settings "
                                 + "so the app can read the USSD reply from the dialer.")
-                .setPositiveButton("Open settings", (d, w) ->
-                        activity.startActivity(new Intent(
-                                Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+                .setPositiveButton("Open settings", (d, w) -> activity.startActivity(new Intent(
+                        Settings.ACTION_ACCESSIBILITY_SETTINGS)))
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
     private void deliverFailure(
             USSDCallback callback,
-            int errorCode
-    ) {
+            int errorCode) {
 
-        mainHandler.post(() ->
-                callback.onFailure(errorCode)
-        );
+        mainHandler.post(() -> callback.onFailure(errorCode));
     }
 }
