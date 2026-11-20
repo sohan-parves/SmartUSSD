@@ -118,7 +118,7 @@ Smart USSD has two ways of talking to the network.
 **Steps**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/SmartUSSD.git
+git clone https://github.com/sohan-parves/SmartUSSD.git
 cd SmartUSSD
 ```
 

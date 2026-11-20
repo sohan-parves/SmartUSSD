@@ -21,6 +21,8 @@ import com.sohan.smartussd.R;
  */
 public class HelperKeepAliveService extends Service {
 
+    public static final String KEY_NOTIFICATION_ENABLED = "notification_enabled";
+
     private static final String CHANNEL_ID = "smart_ussd_helper";
     private static final int NOTIFICATION_ID = 9001;
 
@@ -84,7 +86,30 @@ public class HelperKeepAliveService extends Service {
 
     /* ---- Static helpers ---- */
 
+    public static boolean isNotificationEnabled(Context context) {
+        if (context == null) return false;
+        return context.getSharedPreferences("smart_ussd", Context.MODE_PRIVATE)
+                .getBoolean(KEY_NOTIFICATION_ENABLED, true);
+    }
+
+    public static void setNotificationEnabled(Context context, boolean enabled) {
+        if (context == null) return;
+        context.getSharedPreferences("smart_ussd", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_NOTIFICATION_ENABLED, enabled)
+                .apply();
+        if (!enabled) {
+            stop(context);
+        } else {
+            start(context);
+        }
+    }
+
     public static void start(Context context) {
+        if (context == null) return;
+        if (!isNotificationEnabled(context)) {
+            return;
+        }
         try {
             Intent intent = new Intent(context, HelperKeepAliveService.class);
             context.startForegroundService(intent);

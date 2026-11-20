@@ -30,10 +30,13 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.widget.SwitchCompat;
+
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.sohan.smartussd.ui.DialPadView;
 import com.sohan.smartussd.ui.Feedback;
 import com.sohan.smartussd.ui.ResponsePanel;
+import com.sohan.smartussd.ussd.HelperKeepAliveService;
 import com.sohan.smartussd.ussd.USSDAccessibilityService;
 import com.sohan.smartussd.ussd.USSDManager;
 
@@ -1453,27 +1456,24 @@ public class MainActivity extends Activity {
             });
         }
 
-        // 5. Notification
+        // 5. Notification Toggle (ON / OFF)
         View itemNotification = view.findViewById(R.id.settingItemNotification);
-        TextView badgeNotification = view.findViewById(R.id.badgeNotification);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            boolean notifGranted = checkSelfPermission(
-                    Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-            if (notifGranted) {
-                badgeNotification.setText("ALLOWED");
-                badgeNotification.setTextColor(getColor(R.color.success));
-                badgeNotification.setBackground(pillDrawable(getColor(R.color.success_soft)));
-            } else {
-                badgeNotification.setText("OFF");
-                badgeNotification.setTextColor(getColor(R.color.text_muted));
-                badgeNotification.setBackground(pillDrawable(getColor(R.color.surface_alt)));
-            }
-            itemNotification.setOnClickListener(v -> {
-                sheet.dismiss();
-                requestNotificationPermission();
+        SwitchCompat switchNotification = view.findViewById(R.id.switchNotification);
+        boolean isNotifOn = HelperKeepAliveService.isNotificationEnabled(this);
+        if (switchNotification != null) {
+            switchNotification.setChecked(isNotifOn);
+            switchNotification.setOnCheckedChangeListener((btn, isChecked) -> {
+                HelperKeepAliveService.setNotificationEnabled(this, isChecked);
+                Toast.makeText(this,
+                        isChecked ? "Helper notification turned ON" : "Helper notification turned OFF",
+                        Toast.LENGTH_SHORT).show();
             });
-        } else {
-            itemNotification.setVisibility(View.GONE);
+        }
+
+        if (itemNotification != null && switchNotification != null) {
+            itemNotification.setOnClickListener(v -> {
+                switchNotification.toggle();
+            });
         }
 
         // Actions:
@@ -1500,6 +1500,14 @@ public class MainActivity extends Activity {
             });
         }
 
+        Button btnNotificationSettings = view.findViewById(R.id.btnNotificationSettings);
+        if (btnNotificationSettings != null) {
+            btnNotificationSettings.setOnClickListener(v -> {
+                sheet.dismiss();
+                openNotificationSettings();
+            });
+        }
+
         Button btnAppDetails = view.findViewById(R.id.btnAppDetails);
         if (btnAppDetails != null) {
             btnAppDetails.setOnClickListener(v -> {
@@ -1514,6 +1522,23 @@ public class MainActivity extends Activity {
         }
 
         sheet.show();
+    }
+
+    private void openNotificationSettings() {
+        try {
+            Intent intent = new Intent();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                intent.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+            } else {
+                intent.setAction("android.settings.APP_NOTIFICATION_SETTINGS");
+                intent.putExtra("app_package", getPackageName());
+                intent.putExtra("app_uid", getApplicationInfo().uid);
+            }
+            startActivity(intent);
+        } catch (Exception e) {
+            openAppSettings();
+        }
     }
 
     private void requestBatteryOptimisationDirect() {
