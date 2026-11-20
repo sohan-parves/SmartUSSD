@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Backdrop -->
+    <color name="bg_top">#FF0A1020</color>
+    <color name="bg_bottom">#FF0F1D3A</color>
+
+    <!-- Surfaces -->
+    <color name="surface">#FF141F36</color>
+    <color name="surface_alt">#FF1B2A47</color>
+    <color name="surface_input">#FF0E182D</color>
+    <color name="stroke">#FF273A5E</color>
+
+    <!-- Brand -->
+    <color name="accent">#FF22D3EE</color>
+    <color name="accent_dark">#FF14B8A6</color>
+    <color name="on_accent">#FF04202B</color>
+    <color name="success">#FF34D399</color>
+    <color name="success_soft">#2234D399</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFF1F5FF</color>
+    <color name="text_body">#FFD5E0F2</color>
+    <color name="text_muted">#FF8FA0BF</color>
+    <color name="text_faint">#FF5F7191</color>
+    <color name="disabled">#FF2A3A59</color>
+    <color name="error">#FFFF8A8A</color>
+    <color name="accent_soft">#2222D3EE</color>
+    <color name="warning">#FFFBBF24</color>
+    <color name="warning_soft">#22FBBF24</color>
+    <color name="error_soft">#22FF8A8A</color>
+    <color name="skeleton">#FF1F3050</color>
+</resources>

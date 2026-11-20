@@ -1,0 +1,8 @@
+<resources>
+    <!-- Android 12+: system splash is just the app background (blank icon);
+         the in-app splash draws the logo, so it shows only once. -->
+    <style name="Theme.SmartUSSD" parent="Base.Theme.SmartUSSD">
+        <item name="android:windowSplashScreenBackground">@color/bg_top</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_blank</item>
+    </style>
+</resources>

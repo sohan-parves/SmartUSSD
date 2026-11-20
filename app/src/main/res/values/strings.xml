@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SmartUSSD</string>
+    <string name="accessibility_description">Reads USSD replies from the system phone dialog so Smart USSD can show them inside the app. No other data is read or stored.</string>
+</resources>

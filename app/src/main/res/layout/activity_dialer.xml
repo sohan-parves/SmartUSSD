@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_screen"
+    android:fillViewport="true"
+    android:fitsSystemWindows="true"
+    android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <include layout="@layout/include_header" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Smart Dialer"
+            android:textColor="@color/text_primary"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="22dp"
+            android:text="Dial a USSD code with the keypad."
+            android:textColor="@color/text_muted"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                style="@style/SectionLabel"
+                android:text="ENTER USSD CODE" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:layout_marginTop="12dp">
+
+                <EditText
+                    android:id="@+id/codeInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/bg_input"
+                    android:digits="0123456789*#"
+                    android:gravity="center"
+                    android:hint="*121#"
+                    android:inputType="phone"
+                    android:letterSpacing="0.12"
+                    android:maxLength="40"
+                    android:paddingStart="52dp"
+                    android:paddingEnd="52dp"
+                    android:singleLine="true"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_faint"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/btnBackspace"
+                    android:layout_width="48dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="end"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Delete"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_backspace" />
+            </FrameLayout>
+
+            <com.sohan.smartussd.ui.DialPadView
+                android:id="@+id/dialPad"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp" />
+
+            <Button
+                android:id="@+id/btnDialSend"
+                style="@style/PrimaryButton"
+                android:layout_marginTop="16dp"
+                android:text="SEND USSD  →" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

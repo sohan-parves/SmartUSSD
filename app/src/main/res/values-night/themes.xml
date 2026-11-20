@@ -1,0 +1,14 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- App is dark-only so the gradient design always looks right. -->
+    <style name="Base.Theme.SmartUSSD" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/bg_top</item>
+        <item name="android:statusBarColor">@color/bg_top</item>
+        <item name="android:navigationBarColor">@color/bg_bottom</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_muted</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorHint">@color/text_faint</item>
+        <item name="android:textColorHighlight">#5522D3EE</item>
+        <item name="android:textCursorDrawable">@drawable/cursor_accent</item>
+    </style>
+</resources>

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <FrameLayout
+        android:layout_width="150dp"
+        android:layout_height="150dp">
+
+        <View
+            android:id="@+id/errorPulse"
+            android:layout_width="104dp"
+            android:layout_height="104dp"
+            android:layout_gravity="center" />
+
+        <View
+            android:id="@+id/errorRing"
+            android:layout_width="104dp"
+            android:layout_height="104dp"
+            android:layout_gravity="center" />
+
+        <ImageView
+            android:id="@+id/errorIcon"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/errorTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:textColor="@color/text_primary"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/errorMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:lineSpacingExtra="4dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/text_muted"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/errorNote"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:background="@drawable/bg_pill"
+        android:paddingStart="14dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="7dp"
+        android:textColor="@color/success"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/errorSteps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:background="@drawable/bg_card"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/errorPrimary"
+        style="@style/PrimaryButton"
+        android:layout_marginTop="30dp" />
+
+    <Button
+        android:id="@+id/errorSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_button_secondary"
+        android:stateListAnimator="@null"
+        android:textAllCaps="false"
+        android:textColor="@color/text_body"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+</merge>
