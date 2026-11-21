@@ -1477,6 +1477,14 @@ public class MainActivity extends Activity {
         }
 
         // Actions:
+        Button btnFixDeniedAccess = view.findViewById(R.id.btnFixDeniedAccess);
+        if (btnFixDeniedAccess != null) {
+            btnFixDeniedAccess.setOnClickListener(v -> {
+                sheet.dismiss();
+                showRestrictedSettingsDialog();
+            });
+        }
+
         Button btnViewGuide = view.findViewById(R.id.btnViewGuide);
         if (btnViewGuide != null) {
             btnViewGuide.setOnClickListener(v -> {
@@ -1539,6 +1547,21 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             openAppSettings();
         }
+    }
+
+    private void showRestrictedSettingsDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Fix \"App was denied access\"")
+                .setMessage("Android 13+ restricts accessibility for apps installed outside Google Play Store.\n\n"
+                        + "To unlock it in 10 seconds:\n\n"
+                        + "1. Tap \"Open App Info\" below.\n"
+                        + "2. In the top-right corner, tap the 3 dots (⋮).\n"
+                        + "3. Tap \"Allow restricted settings\" and verify with your PIN/fingerprint.\n"
+                        + "4. Come back to Accessibility and turn ON Smart USSD.")
+                .setPositiveButton("1. Open App Info", (d, w) -> openAppSettings())
+                .setNeutralButton("2. Accessibility", (d, w) -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     private void requestBatteryOptimisationDirect() {

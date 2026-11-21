@@ -332,6 +332,19 @@
                 android:text="GUIDE &amp; RE-CHECK" />
 
             <Button
+                android:id="@+id/btnFixDeniedAccess"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_button_secondary"
+                android:stateListAnimator="@null"
+                android:text="🔓  Fix &quot;App was denied access&quot; (Android 13+)"
+                android:textAllCaps="false"
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <Button
                 android:id="@+id/btnViewGuide"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"

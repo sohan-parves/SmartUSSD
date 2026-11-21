@@ -139,13 +139,10 @@ public class ResponsePanel {
                 null,
                 new String[] {
                         "Tap the button below to open Accessibility settings.",
-                        "Open \"Installed apps\" (or \"Downloaded apps\") and "
-                                + "choose Smart USSD.",
+                        "Open \"Installed apps\" (or \"Downloaded apps\") and choose Smart USSD.",
                         "Turn the switch ON and tap Allow.",
                         "Come back here to continue setup.",
-                        "Tip: if the switch is greyed out, open Settings › Apps › "
-                                + "Smart USSD, tap ⋮ and choose \"Allow restricted "
-                                + "settings\"."
+                        "⚠️ If you see \"App was denied access\": Open App Info (Settings › Apps › Smart USSD), tap 3 dots (⋮) in top-right corner, and tap \"Allow restricted settings\"."
                 },
                 "Enable USSD helper",
                 openSettings,
